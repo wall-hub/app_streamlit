@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, date
 import time
 import base64 
+import io
 
 # ===============================================
 # 0) CONFIGURACIÓN INICIAL Y ESTILOS
@@ -26,13 +27,16 @@ PORTAFOLIOS_INICIALES = {
         "VTI": 0.25, "SPY": 0.15, "EFA": 0.15, "VWO": 0.15, "AGG": 0.20, "IAU": 0.05, "QQQ": 0.05
     },
     "Agresivo": {
-        "QQQ": 0.30, "SPY": 0.20, "IWM": 0.15, "VGT": 0.15, "VWO": 0.10, "SMH": 0.05, "GOOGL": 0.025, "NVDA": 0.025
+        "QQQ": 0.30, "SPY": 0.20, "IWM": 0.15, "VGT": 0.15, "VWO": 0.10, "SMH": 0.05, "AAPL": 0.025, "NVDA": 0.025
     }
 }
 
 # Inicializar st.session_state con los portafolios si no existen
 if 'portafolios_personalizados' not in st.session_state:
     st.session_state['portafolios_personalizados'] = PORTAFOLIOS_INICIALES
+
+# Diccionario para almacenar los gráficos generados (para la descarga PDF/HTML)
+generated_charts = {}
 
 # ===============================================
 # 1) FUNCIONES DE CÁLCULO Y UTILIDADES
@@ -107,7 +111,6 @@ def mc_trayectorias(ret_activos, pesos_dict, aporte_mensual, n_sim, fut_years):
     try:
         r_act = np.random.multivariate_normal(mean=mu, cov=cov, size=(meses, n_sim))
     except np.linalg.LinAlgError:
-        # st.warning ya se maneja en el flujo de ejecución principal
         cov_diag = np.diag(np.diag(cov))
         r_act = np.random.multivariate_normal(mean=mu, cov=cov_diag, size=(meses, n_sim))
 
@@ -128,6 +131,12 @@ def dca_backtest(rp, aporte):
         V = (V + aporte) * (1.0 + r)
         vals.append(V)
     return pd.Series(vals, index=rp.index)
+
+# Función para codificar gráficos a base64 (para HTML/PDF)
+def fig_to_base64(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches='tight')
+    return base64.b64encode(buf.getvalue()).decode()
 
 # ===============================================
 # 2) UI LATERAL (SIDEBAR) Y CARGA DE DATOS
@@ -178,11 +187,43 @@ except Exception as e:
     st.stop()
 
 # ===============================================
-# 3) UI PRINCIPAL: VISUALIZACIÓN
+# 3) UI PRINCIPAL: VISUALIZACIÓN Y GLOSARIO
 # ===============================================
 
 st.header("Simulador de Portafolios: Analiza y Proyecta")
 st.markdown("Ajusta los pesos de tus portafolios y observa cómo cambian el riesgo, el retorno y las proyecciones futuras.")
+st.markdown("---")
+
+# --- GLOSARIO DE INDICADORES (NUEVO) ---
+with st.expander("📚 Glosario: Entendiendo los Indicadores Financieros", expanded=False):
+    st.markdown("Esta sección explica en términos sencillos los indicadores clave que utilizamos para evaluar tus inversiones.")
+    st.markdown("---")
+    
+    col_g1, col_g2, col_g3 = st.columns(3)
+    
+    col_g1.subheader("💰 Rendimiento")
+    col_g1.markdown("""
+    * **CAGR (Tasa de Crecimiento Anual Compuesta):** Es el retorno promedio anual que tu portafolio ha generado o podría generar.
+        * **En términos sencillos:** Es el interés anual constante que necesitas para pasar de tu inversión inicial al valor final. Un CAGR más alto es mejor.
+    * **Valor Final del Portafolio:** El valor total acumulado de tu inversión, incluyendo tus aportaciones y las ganancias generadas.
+    """)
+    
+    col_g2.subheader("⚠️ Riesgo y Volatilidad")
+    col_g2.markdown("""
+    * **Volatilidad Anualizada (Riesgo):** Mide cuánto varía el valor de tu portafolio respecto a su promedio.
+        * **En términos sencillos:** Es la "sacudida" o inestabilidad del precio. Una volatilidad alta significa mayores subidas y bajadas, lo que se traduce en **mayor riesgo**.
+    * **P5 (Peor Caso, 5to Percentil):** El valor mínimo que el portafolio alcanzó en el 5% de las simulaciones Monte Carlo.
+        * **En términos sencillos:** Es un escenario pesimista, el valor que es poco probable (solo 5% de chance) que sea menor que este.
+    """)
+    
+    col_g3.subheader("📊 Eficiencia y Comparativa")
+    col_g3.markdown("""
+    * **Ratio Sharpe:** Mide el retorno extra que obtienes por cada unidad de riesgo asumida.
+        * **En términos sencillos:** Es la **eficiencia** del portafolio. Si tienes dos portafolios con el mismo retorno, el que tenga el Ratio Sharpe más alto es mejor, porque logró ese retorno tomando menos riesgo. Un Ratio Sharpe **mayor a 1.0** se considera bueno.
+    * **P50 (Mediana, Escenario Base):** El valor que está justo en el medio de todas las simulaciones Monte Carlo.
+        * **En términos sencillos:** Es la proyección más probable o el resultado "típico" esperado.
+    """)
+
 st.markdown("---")
 
 # --- FRONTERA DE MARKOWITZ EN UN EXPANDER ---
@@ -240,6 +281,9 @@ with st.expander("🌐 Ver Frontera Eficiente de Markowitz (Riesgo vs. Retorno)"
         ax_ef.legend()
         ax_ef.grid(True, alpha=0.3)
         st.pyplot(fig_ef)
+        # Almacenar gráfico
+        generated_charts['Frontera_Eficiente'] = fig_to_base64(fig_ef)
+
 
 # --- ANÁLISIS DETALLADO POR TABS ---
 
@@ -344,10 +388,12 @@ for i, (nombre_port, pesos_iniciales) in enumerate(PORTAFOLIOS_INICIALES.items()
         ax_bt.legend()
         ax_bt.grid(True, alpha=0.2)
         st.pyplot(fig_bt)
+        # Almacenar gráfico
+        generated_charts[f'{nombre_port}_Backtest'] = fig_to_base64(fig_bt)
         
         st.divider()
         
-        # --- SECCIÓN 3: PROYECCIÓN MONTE CARLO (MODIFICADA) ---
+        # --- SECCIÓN 3: PROYECCIÓN MONTE CARLO ---
         st.subheader(f"2. Proyección Monte Carlo ({fut_years} años)")
         
         col_m1, col_m2 = st.columns(2)
@@ -361,7 +407,7 @@ for i, (nombre_port, pesos_iniciales) in enumerate(PORTAFOLIOS_INICIALES.items()
         
         fig_mc, ax_mc = plt.subplots(figsize=(10, 4))
         
-        # MODIFICACIÓN CLAVE: Crear el eje X de fechas
+        # Crear el eje X de fechas
         start_date = date.today()
         # Generar las fechas mensuales desde la fecha actual
         date_range = pd.date_range(start=start_date, periods=len(p50), freq='M') 
@@ -370,35 +416,41 @@ for i, (nombre_port, pesos_iniciales) in enumerate(PORTAFOLIOS_INICIALES.items()
         ax_mc.fill_between(date_range, p5, p95, color='#3498db', alpha=0.15, label='Rango de Confianza P5 - P95')
         ax_mc.set_title(f"Distribución de Riqueza Proyectada a {fut_years} años", fontsize=14)
         
-        # MODIFICACIÓN CLAVE: Cambiar la etiqueta del eje X
+        # Cambiar la etiqueta del eje X a años futuros y formatear
         ax_mc.set_xlabel("Años Futuros (desde la fecha actual)") 
-        
         ax_mc.set_ylabel("Valor Portafolio (USD)")
-        
-        # Ajustar el formato del eje X para que muestre solo el año
         ax_mc.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%Y'))
         
         ax_mc.legend()
         ax_mc.grid(True, alpha=0.2)
         st.pyplot(fig_mc)
+        # Almacenar gráfico
+        generated_charts[f'{nombre_port}_MonteCarlo'] = fig_to_base64(fig_mc)
         
         # Estadísticas MC (Escenarios)
         peor_caso = np.percentile(results_mc_store[nombre_port], 5)
+        mediana_final_mc_format = np.median(results_mc_store[nombre_port]) # Usar la mediana para la tabla de resumen
         mejor_caso = np.percentile(results_mc_store[nombre_port], 95)
         
         col_mc1, col_mc2, col_mc3 = st.columns(3)
         col_mc1.error(f"P5 (Peor Caso): **${peor_caso:,.0f}**")
-        col_mc2.success(f"P50 (Mediana): **${mediana_final_mc:,.0f}**")
+        col_mc2.success(f"P50 (Mediana): **${mediana_final_mc_format:,.0f}**")
         col_mc3.warning(f"P95 (Mejor Caso): **${mejor_caso:,.0f}**")
-
+        
+        # Agregar datos de Monte Carlo a la tabla de métricas (para la descarga)
+        historical_metrics[-1]['Valor Final (MC)'] = mediana_final_mc_format
+        historical_metrics[-1]['CAGR (MC)'] = cagr_mc
 
 # ===============================================
-# 5) COMPARATIVA FINAL
+# 5) COMPARATIVA FINAL & DESCARGA
 # ===============================================
+
+# --- PESTAÑA COMPARATIVA ---
 with tabs[3]:
     st.header("Análisis Comparativo y Descarga")
     st.markdown("Compara las métricas de rendimiento y riesgo de tus portafolios personalizados.")
     
+    # --- Distribución de Monte Carlo ---
     st.subheader("1. ⚖️ Distribución Final de Monte Carlo")
     
     if results_mc_store:
@@ -411,50 +463,41 @@ with tabs[3]:
         ax_box.set_ylabel("Valor en USD")
         ax_box.grid(axis='y', alpha=0.2)
         st.pyplot(fig_box)
+        # Almacenar gráfico
+        generated_charts['MC_Boxplot'] = fig_to_base64(fig_box)
     else:
         st.warning("No se generaron datos de Monte Carlo. Asegúrate de que los portafolios tengan pesos válidos.")
 
     st.divider()
 
-    # Dataframe de Métricas Históricas
-    df_radar = pd.DataFrame(historical_metrics).set_index("Portafolio")
-    st.subheader("2. 📈 Resumen de Métricas Históricas (Backtest)")
-    st.dataframe(df_radar.style.format({
+    # --- Dataframe de Métricas (Backtest y MC) ---
+    df_metrics = pd.DataFrame(historical_metrics).set_index("Portafolio")
+    # Reordenar las columnas para una mejor lectura
+    cols_order = ['Retorno', 'Volatilidad', 'Sharpe', 'Valor Final (MC)', 'CAGR (MC)']
+    df_metrics = df_metrics.reindex(columns=[c for c in cols_order if c in df_metrics.columns])
+
+    st.subheader("2. 📈 Resumen de Métricas Clave")
+    st.dataframe(df_metrics.style.format({
         "Retorno": "{:.2%}", 
         "Volatilidad": "{:.2%}",
-        "Sharpe": "{:.2f}"
+        "Sharpe": "{:.2f}",
+        "Valor Final (MC)": "${:,.0f}",
+        "CAGR (MC)": "{:.2%}"
     }), use_container_width=True)
     
-    # Botón de Descarga
-    if not df_radar.empty:
-        col_descarga, col_pdf = st.columns([1, 2])
-        
-        csv = df_radar.to_csv(sep=';').encode('utf-8')
-        col_descarga.download_button(
-            label="⬇️ Descargar Métricas (CSV)",
-            data=csv,
-            file_name=f'informe_metricas_portafolios_{datetime.now().strftime("%Y%m%d")}.csv',
-            mime='text/csv',
-            help="Descarga el cuadro de métricas históricas de los portafolios."
-        )
-        
-        col_pdf.markdown("""
-        **💡 Sugerencia de Informe PDF:** Para guardar la página completa (gráficas y tablas) como un informe PDF, usa la función de **Imprimir (Ctrl + P o Cmd + P)** de tu navegador y elige la opción **"Guardar como PDF"**.
-        """)
-    
-    st.divider()
-
-    # GRÁFICO RADAR
+    # --- GRÁFICO RADAR ---
     st.subheader("3. 🎯 Perfil de Riesgo/Rendimiento Normalizado (Gráfico Radar)")
 
-    if not df_radar.empty:
-        indicadores = list(df_radar.columns) 
+    if not df_metrics.empty:
+        df_radar = df_metrics.copy()
         
+        # Necesitamos las métricas de Backtest para el radar
         radar_norm = pd.DataFrame({
             "Retorno": normalizar(df_radar["Retorno"]),
             "Volatilidad": normalizar(df_radar["Volatilidad"], invertir=True),
             "Sharpe": normalizar(df_radar["Sharpe"])
         })
+        indicadores = list(radar_norm.columns) 
 
         N = len(indicadores)
         angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist() 
@@ -462,7 +505,6 @@ with tabs[3]:
 
         fig_radar, ax_radar = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
         
-
 
         
         for i, port in enumerate(radar_norm.index):
@@ -481,5 +523,116 @@ with tabs[3]:
         ax_radar.legend(loc="upper right", bbox_to_anchor=(1.2, 1.1))
         ax_radar.set_title("Perfil de Riesgo/Retorno (Normalizado a 1)", size=14, pad=20)
         st.pyplot(fig_radar)
+        # Almacenar gráfico
+        generated_charts['Radar'] = fig_to_base64(fig_radar)
     else:
         st.warning("No hay datos suficientes para generar la comparativa del gráfico Radar.")
+    
+    st.divider()
+
+    # --- DESCARGA DE INFORME HTML PARA PDF (NUEVO) ---
+    
+    def generate_html_report(df_metrics, generated_charts, fut_years):
+        """Genera el contenido HTML para descargar el informe."""
+        
+        # Convertir tabla de métricas a HTML
+        df_html = df_metrics.style.format({
+            "Retorno": "{:.2%}", 
+            "Volatilidad": "{:.2%}",
+            "Sharpe": "{:.2f}",
+            "Valor Final (MC)": "${:,.0f}",
+            "CAGR (MC)": "{:.2%}"
+        }).to_html()
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Informe de Análisis de Portafolios - {datetime.now().strftime("%Y-%m-%d")}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; color: #333; }}
+                h1 {{ color: #2C3E50; border-bottom: 2px solid #3498DB; padding-bottom: 10px; }}
+                h2 {{ color: #34495E; margin-top: 30px; }}
+                h3 {{ color: #16A085; }}
+                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+                th, td {{ border: 1px solid #BDC3C7; padding: 10px; text-align: left; }}
+                th {{ background-color: #ECF0F1; }}
+                .chart-container {{ margin-top: 40px; page-break-inside: avoid; }}
+                .chart-container img {{ max-width: 100%; height: auto; display: block; margin: 0 auto; }}
+                .disclaimer {{ margin-top: 50px; padding: 15px; background-color: #F8F9FA; border-left: 5px solid #E74C3C; font-size: 0.9em; }}
+            </style>
+        </head>
+        <body>
+            <h1>📊 Informe de Análisis de Portafolios de Inversión</h1>
+            <p>Fecha de Generación: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>
+            <p>Aporte Mensual utilizado: ${aporte_mensual:,.0f}</p>
+            <p>Horizonte de Proyección (Monte Carlo): {fut_years} años</p>
+
+            <h2>1. Resumen de Métricas Clave (Backtest Histórico y Proyección)</h2>
+            {df_html}
+
+            <h2>2. Visualización de Gráficos</h2>
+            
+            <h3>Frontera Eficiente de Markowitz</h3>
+            <div class="chart-container">
+                <img src="data:image/png;base64,{generated_charts.get('Frontera_Eficiente', '')}" alt="Frontera Eficiente">
+            </div>
+
+            <h3>Comparación de Distribución Monte Carlo</h3>
+            <div class="chart-container">
+                <img src="data:image/png;base64,{generated_charts.get('MC_Boxplot', '')}" alt="Boxplot Monte Carlo">
+            </div>
+
+            <h3>Perfil de Riesgo/Rendimiento (Radar)</h3>
+            <div class="chart-container">
+                <img src="data:image/png;base64,{generated_charts.get('Radar', '')}" alt="Gráfico Radar">
+            </div>
+            
+            """
+            
+        # Incluir gráficos individuales
+        for port_name in PORTAFOLIOS_INICIALES.keys():
+            html_content += f"""
+            <h2 style="page-break-before: always;">3. Análisis Detallado del Portafolio {port_name}</h2>
+            
+            <h3>Evolución Histórica (Backtest)</h3>
+            <div class="chart-container">
+                <img src="data:image/png;base64,{generated_charts.get(f'{port_name}_Backtest', '')}" alt="{port_name} Backtest">
+            </div>
+
+            <h3>Proyección Monte Carlo</h3>
+            <div class="chart-container">
+                <img src="data:image/png;base64,{generated_charts.get(f'{port_name}_MonteCarlo', '')}" alt="{port_name} Monte Carlo">
+            </div>
+            """
+
+        html_content += """
+            <div class="disclaimer">
+                <h3>Aviso Legal:</h3>
+                <p>Este informe se basa en simulaciones históricas y modelos estadísticos (Monte Carlo). Los rendimientos pasados no garantizan rendimientos futuros. Este documento no constituye asesoramiento de inversión, fiscal o legal. Consulte a un profesional financiero calificado antes de tomar decisiones de inversión.</p>
+            </div>
+        </body>
+        </html>
+        """
+        return html_content.encode()
+
+    
+    if not df_metrics.empty:
+        html_file = generate_html_report(df_metrics, generated_charts, fut_years)
+        
+        st.subheader("4. 💾 Descargar Análisis Completo")
+        
+        st.download_button(
+            label="⬇️ Generar Informe Completo (Archivo HTML)",
+            data=html_file,
+            file_name=f'Informe_Portafolios_{datetime.now().strftime("%Y%m%d")}.html',
+            mime='text/html',
+            help="Descarga un archivo HTML que contiene todos los gráficos y métricas. Luego puedes abrirlo e imprimirlo (Ctrl+P) como PDF."
+        )
+        
+        st.info("""
+        **Paso Extra Importante (Para PDF):** 1.  Descargue el archivo HTML.
+        2.  Ábralo en su navegador (Chrome, Firefox, Edge).
+        3.  Presione **Ctrl + P (o Cmd + P en Mac)**.
+        4.  En el destino de la impresora, seleccione **"Guardar como PDF"** para obtener el informe final con los gráficos y tablas.
+        """)
