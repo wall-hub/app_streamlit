@@ -494,7 +494,7 @@ with tabs[3]:
         # Necesitamos las métricas de Backtest para el radar
         radar_norm = pd.DataFrame({
             "Retorno": normalizar(df_radar["Retorno"]),
-            "Volatilidad": normalizar(df_radar["Volatilidad"], invertir=True),
+            "Estabilidad": normalizar(df_radar["Volatilidad"], invertir=True),
             "Sharpe": normalizar(df_radar["Sharpe"])
         })
         indicadores = list(radar_norm.columns) 
@@ -636,3 +636,4 @@ with tabs[3]:
         3.  Presione **Ctrl + P (o Cmd + P en Mac)**.
         4.  En el destino de la impresora, seleccione **"Guardar como PDF"** para obtener el informe final con los gráficos y tablas.
         """)
+
