@@ -30,6 +30,22 @@ PORTAFOLIOS_INICIALES = {
         "QQQ": 0.30, "SPY": 0.20, "IWM": 0.15, "VGT": 0.15, "VWO": 0.10, "SMH": 0.05, "AAPL": 0.025, "NVDA": 0.025
     }
 }
+TICKER_NAMES = {
+    "AGG": "iShares Core U.S. Aggregate Bond ETF",
+    "IEF": "iShares 7-10 Year Treasury Bond ETF",
+    "VTI": "Vanguard Total Stock Market ETF",
+    "IAU": "iShares Gold Trust",
+    "VIG": "Vanguard Dividend Appreciation ETF",
+    "SPY": "SPDR S&P 500 ETF Trust",
+    "EFA": "iShares MSCI EAFE ETF",
+    "VWO": "Vanguard FTSE Emerging Markets ETF",
+    "QQQ": "Invesco QQQ Trust",
+    "IWM": "iShares Russell 2000 ETF",
+    "VGT": "Vanguard Information Technology ETF",
+    "SMH": "VanEck Semiconductor ETF",
+    "AAPL": "Apple Inc.",
+    "NVDA": "NVIDIA Corp."
+}
 
 # Inicializar st.session_state con los portafolios si no existen
 if 'portafolios_personalizados' not in st.session_state:
@@ -165,8 +181,10 @@ for name, pesos in PORTAFOLIOS.items():
     else:
         pesos_norm = {k: 0 for k in pesos.keys()}
 
-    df_pesos = pd.DataFrame(list(pesos_norm.items()), columns=["Ticker", "Peso"]).set_index("Ticker")
+    df_pesos = pd.DataFrame(list(pesos_norm.items()), columns=["Ticker", "Peso"])
+    df_pesos["Nombre"] = df_pesos["Ticker"].map(TICKER_NAMES)
     df_pesos["Peso"] = (df_pesos["Peso"] * 100).round(1).astype(str) + '%'
+    df_pesos = df_pesos[["Ticker", "Nombre", "Peso"]]
     st.sidebar.dataframe(df_pesos, use_container_width=True, height=len(df_pesos) * 35 + 38)
 st.sidebar.markdown("---")
 
@@ -636,4 +654,5 @@ with tabs[3]:
         3.  Presione **Ctrl + P (o Cmd + P en Mac)**.
         4.  En el destino de la impresora, seleccione **"Guardar como PDF"** para obtener el informe final con los gráficos y tablas.
         """)
+
 
