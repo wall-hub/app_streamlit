@@ -183,7 +183,7 @@ for name, pesos in PORTAFOLIOS.items():
 
     df_pesos = pd.DataFrame(list(pesos_norm.items()), columns=["Ticker", "Peso"])
     df_pesos["Nombre"] = df_pesos["Ticker"].map(TICKER_NAMES).fillna("Nombre no disponible")
-    df_pesos["Peso"] = df_pesos["Peso"] * 100
+    df_pesos["Peso"] = df_pesos["Peso"] * 100.round(1).astype(str) + '%'
     # Reordenar columnas: Nombre primero
     df_pesos = df_pesos[["Nombre", "Ticker", "Peso"]]
     st.sidebar.dataframe(df_pesos, use_container_width=True, height=len(df_pesos) * 35 + 38, hide_index=True )
@@ -655,6 +655,7 @@ with tabs[3]:
         3.  Presione **Ctrl + P (o Cmd + P en Mac)**.
         4.  En el destino de la impresora, seleccione **"Guardar como PDF"** para obtener el informe final con los gráficos y tablas.
         """)
+
 
 
 
